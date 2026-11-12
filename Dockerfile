@@ -38,9 +38,9 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl \
   && rm -rf /wheels
 
-# 构建期自检：greenlet 缺失、SQLAlchemy 2.1（无 await_fallback）或
-# dmSQLAlchemy 异步方言无法导入时，让 build 直接失败，而不是等到容器启动。
-RUN python -c "import greenlet; import sqlalchemy.ext.asyncio; from sqlalchemy.util import await_fallback; from sqlalchemy.dialects import registry; registry.load('dm.dmAsync'); import sqlalchemy; print('dependency check ok, sqlalchemy=' + sqlalchemy.__version__)"
+# 构建期自检：greenlet 缺失、SQLAlchemy 2.1（无 await_fallback）、
+# dmSQLAlchemy 异步方言加载及 slots 描述符补丁有效性，让 build 直接失败，而不是等到容器启动。
+RUN python -c "import greenlet; import sqlalchemy.ext.asyncio; from sqlalchemy.util import await_fallback; from sqlalchemy.dialects import registry; registry.load('dm.dmAsync'); import dm_mcp; import dmSQLAlchemy.dmasync as m; assert '_connection' not in m.AsyncAdapt_dmasync_connection.__dict__, 'AsyncAdapt_dmasync_connection._connection must not shadow slot descriptor'; assert '_cursor' not in m.AsyncAdapt_dmasync_cursor.__dict__, 'AsyncAdapt_dmasync_cursor._cursor must not shadow slot descriptor'; import sqlalchemy; print('dependency check ok, sqlalchemy=' + sqlalchemy.__version__)"
 
 # 运行时不需要 pip，卸载它以减少镜像体积（失败不影响构建）
 RUN python -m pip uninstall -y pip || true

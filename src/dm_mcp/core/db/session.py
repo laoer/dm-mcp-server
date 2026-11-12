@@ -27,6 +27,10 @@ from dm_mcp.settings.database_config import (
 )
 
 from .models import AdminUserModel, AppSettingsModel, Base, DataSourceModel, TokenModel
+from dm_mcp.infra.persistence.dmsqlalchemy_patch import apply_dmsqlalchemy_patch
+
+# 确保在任何引擎创建前已应用 dmSQLAlchemy 异步方言补丁
+apply_dmsqlalchemy_patch()
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +220,10 @@ def init_db(cfg: DatabaseConfig) -> None:
     if _engine is not None:
         logger.warning("数据库引擎已初始化，跳过重复初始化")
         return
+
+    # 达梦数据库环境：确保已对 dmSQLAlchemy 2.0.17 打上 slots 描述符补丁
+    if cfg.db_type == "dameng":
+        apply_dmsqlalchemy_patch()
 
     # 在创建异步引擎前，为不同数据库类型执行一次性初始化逻辑：
     # - 达梦：确保目标模式存在（CREATE SCHEMA）。

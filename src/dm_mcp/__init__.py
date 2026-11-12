@@ -8,6 +8,12 @@
 - 企业级安全和监控
 """
 
+from dm_mcp.infra.persistence.dmsqlalchemy_patch import apply_dmsqlalchemy_patch
+
+# 自动应用 dmSQLAlchemy 异步方言类属性遮蔽描述符的补丁
+apply_dmsqlalchemy_patch()
+
 __version__ = "1.0.0"
 __author__ = "DM MCP Team"
 __description__ = "达梦数据库 MCP 服务"
+

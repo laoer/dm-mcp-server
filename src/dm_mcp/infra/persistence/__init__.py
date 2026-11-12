@@ -21,6 +21,7 @@ from .datasource_context import DatasourceContext
 from .pool_config import DmPoolConfig
 from .query import OwnedQuery
 from .schema_check import SchemaIncompatibleError
+from .dmsqlalchemy_patch import apply_dmsqlalchemy_patch
 from .session import (
     AsyncSession,
     bootstrap_schema,
@@ -57,4 +58,5 @@ __all__ = [
     "get_schema_location_hint",
     "close_db",
     "AsyncSession",
+    "apply_dmsqlalchemy_patch",
 ]
