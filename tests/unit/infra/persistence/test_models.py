@@ -298,3 +298,21 @@ class TestBaseModel:
         assert issubclass(TokenModel, Base)
         assert issubclass(AdminUserModel, Base)
         assert issubclass(DataSourceModel, Base)
+
+
+class TestTimestampDefaults:
+    """时间戳列默认值测试"""
+
+    def test_server_default_columns_have_python_default(self):
+        """所有 server_default 列都应有 Python 默认值。
+
+        dmSQLAlchemy 2.0.17 在 executemany 插入 server_default 列时，会走
+        ``RETURNING ... INTO`` 并在 DBAPI 返回 None 时崩溃；由 Python 侧
+        提供默认值后 INSERT 会显式带上这些列，从而避免隐式 RETURNING。
+        """
+        missing = []
+        for table in Base.metadata.tables.values():
+            for column in table.columns:
+                if column.server_default is not None and column.default is None:
+                    missing.append(f"{table.name}.{column.name}")
+        assert not missing, f"以下列缺少 Python 默认值: {', '.join(missing)}"

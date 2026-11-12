@@ -6,7 +6,7 @@
 import json
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from sqlalchemy import TIMESTAMP, Boolean, CheckConstraint, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
@@ -20,6 +20,18 @@ _SHORT_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv
 def generate_short_id(length: int = 12) -> str:
     """生成 12 字符 base62 短随机 id（约 71 bit 熵，URL/路径友好）。"""
     return "".join(secrets.choice(_SHORT_ID_ALPHABET) for _ in range(length))
+
+
+def utcnow() -> datetime:
+    """当前 UTC 时间，作为 ORM 时间戳列的值。
+
+    显式提供 Python 侧默认值后，INSERT 会带上 created_at/updated_at，
+    SQLAlchemy 不会为这两个 server_default 列生成 RETURNING。
+    这规避了 dmSQLAlchemy 2.0.17 在 executemany + RETURNING ... INTO
+    时因 DBAPI 返回 None 而触发的
+    ``TypeError: 'NoneType' object is not subscriptable``。
+    """
+    return datetime.now(timezone.utc)
 
 
 class GUID(TypeDecorator):
@@ -105,6 +117,7 @@ class TokenModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     expires_at: Mapped[datetime] = mapped_column(
@@ -174,11 +187,13 @@ class AdminUserModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -256,11 +271,13 @@ class DataSourceModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -342,11 +359,13 @@ class CliGroupModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -389,11 +408,13 @@ class EntityGroupAssignmentModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -427,11 +448,13 @@ class AppSettingsModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -477,11 +500,13 @@ class MetadataOverrideModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -542,11 +567,13 @@ class GenericSqlDefinitionModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -606,11 +633,13 @@ class TokenDBObjectConfigModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -683,11 +712,13 @@ class DBObjectConfigModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -749,11 +780,13 @@ class DBSystemObjectDefaultModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -835,11 +868,13 @@ class OAuthProviderModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -929,11 +964,13 @@ class SSHHostModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )

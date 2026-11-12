@@ -5,13 +5,18 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import TIMESTAMP, Boolean, Float, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import CHAR, TypeDecorator
+
+
+def utcnow() -> datetime:
+    """当前 UTC 时间，作为 ORM 时间戳列的值（避免 DM 隐式 RETURNING）。"""
+    return datetime.now(timezone.utc)
 
 
 class GUID(TypeDecorator):
@@ -83,6 +88,7 @@ class TokenModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     expires_at: Mapped[datetime] = mapped_column(
@@ -142,11 +148,13 @@ class AdminUserModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -221,11 +229,13 @@ class DataSourceModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -276,11 +286,13 @@ class AppSettingsModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
+        default=utcnow,
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
