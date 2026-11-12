@@ -33,16 +33,20 @@ RUN apt-get update \
 COPY --from=builder /app/resources /app/resources
 COPY --from=builder /wheels /wheels
 
+# pip 会按 pyproject.toml 中的版本约束解析依赖；sqlalchemy 已在
+# pyproject.toml 中限制为 <2.1，避免装到移除了 await_fallback 的 2.1.x。
 RUN pip install --no-cache-dir /wheels/*.whl \
-  && rm -rf /wheels \
-  # 运行时不需要 pip，卸载它以减少镜像体积
-  && python -m pip uninstall -y pip || true \
-  && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
-  && rm -rf /usr/local/bin/pip*
+  && rm -rf /wheels
 
-# 构建期自检：sqlalchemy.ext.asyncio 依赖 greenlet，缺依赖时让 build 直接失败，
-# 而不是等到容器启动才抛 ImportError
-RUN python -c "import greenlet; import sqlalchemy.ext.asyncio"
+# 构建期自检：greenlet 缺失、SQLAlchemy 2.1（无 await_fallback）或
+# dmSQLAlchemy 异步方言无法导入时，让 build 直接失败，而不是等到容器启动。
+RUN python -c "import greenlet; import sqlalchemy.ext.asyncio; from sqlalchemy.util import await_fallback; from sqlalchemy.dialects import registry; registry.load('dm.dmAsync'); import sqlalchemy; print('dependency check ok, sqlalchemy=' + sqlalchemy.__version__)"
+
+# 运行时不需要 pip，卸载它以减少镜像体积（失败不影响构建）
+RUN python -m pip uninstall -y pip || true
+
+RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
+  && rm -rf /usr/local/bin/pip*
 
 # 默认启用 HTTP 传输（使容器对外提供 Web/API）
 ENV SERVER__TRANSPORT=http \
@@ -52,4 +56,3 @@ ENV SERVER__TRANSPORT=http \
 
 # 由 pyproject.toml 的 entrypoint 脚本启动
 CMD ["dm-mcp-server"]
-

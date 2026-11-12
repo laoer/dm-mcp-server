@@ -35,9 +35,13 @@ dependencies = [
     # 必须带 asyncio extra：greenlet 是 SQLAlchemy asyncio 扩展的运行时依赖。
     # 仅声明 sqlalchemy 时 greenlet 只是按 platform_machine 判断的条件依赖，
     # 在部分平台/离线安装场景不会被装上，导致启动时 ImportError。
-    "sqlalchemy[asyncio]>=2.0.45",
+    # 上限必须 <2.1：dmsqlalchemy 2.0.x 仍从 sqlalchemy.util 导入
+    # await_fallback，而该函数在 SQLAlchemy 2.1 中已被移除。不设上限时
+    # Docker 构建会解析到最新的 2.1.x，容器启动即报
+    # ImportError: cannot import name 'await_fallback'。
+    "sqlalchemy[asyncio]>=2.0.45,<2.1",
     "aiosqlite>=0.19.0",
-    "dmsqlalchemy>=2.0.11",
+    "dmsqlalchemy>=2.0.11,<2.1",
     "pymysql>=1.1.0",
     "psycopg2-binary>=2.9.0",
     "asyncpg>=0.29.0",
