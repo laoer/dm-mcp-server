@@ -105,3 +105,51 @@ class TestDmSQLAlchemyPatch:
         patch_module._DMSQLALCHEMY_PATCHED = False
         with patch.dict("sys.modules", {"dmSQLAlchemy.dmasync": None, "dmSQLAlchemy.base": None}):
             patch_module.apply_dmsqlalchemy_patch()
+
+    def test_executemany_returning_disabled_on_async_dialect(self):
+        """测试补丁禁用异步方言的 insert_executemany_returning"""
+        patch_module._DMSQLALCHEMY_PATCHED = False
+        patch_module.apply_dmsqlalchemy_patch()
+
+        assert dm_async.DMDialectAsync_dmasync.insert_executemany_returning is False
+        assert dm_async.DMDialectAsync_dmasync.insert_executemany_returning_sort_by_parameter_order is False
+        assert dm_async.DMDialect_dmAsync.insert_executemany_returning is False
+
+    def test_safe_executemany_return_on_none_result(self):
+        """测试当 executemany 返回 None 时，安全给 out_parameters 赋初值而不抛 TypeError"""
+        import dmSQLAlchemy.extensions as dm_ext
+
+        patch_module._DMSQLALCHEMY_PATCHED = False
+        patch_module.apply_dmsqlalchemy_patch()
+
+        adapter = dm_ext.DMDialect_Adapter()
+
+        class DummyContext:
+            def __init__(self):
+                self.out_parameters = {"ret_0": None, "ret_1": None}
+                self.invoked_statement = None
+
+        class DummyDialect:
+            def check_position(self, poslist, params):
+                return poslist, params
+
+        class DummyCursor:
+            def executemany(self, stmt, params):
+                return None
+
+        # 测试异步版本
+        ctx_async = DummyContext()
+        adapter.async_do_executemany_return(
+            2, 3, DummyDialect(), DummyCursor(), "INSERT INTO t VALUES (?, ?) RETURNING a, b INTO ?, ?", [[None, None]], ctx_async
+        )
+        assert ctx_async.out_parameters["ret_0"] == [None, None, None]
+        assert ctx_async.out_parameters["ret_1"] == [None, None, None]
+
+        # 测试同步版本
+        ctx_sync = DummyContext()
+        adapter.do_executemany_return(
+            2, 3, DummyDialect(), DummyCursor(), "INSERT INTO t VALUES (?, ?) RETURNING a, b INTO ?, ?", [[None, None]], ctx_sync
+        )
+        assert ctx_sync.out_parameters["ret_0"] == [None, None, None]
+        assert ctx_sync.out_parameters["ret_1"] == [None, None, None]
+

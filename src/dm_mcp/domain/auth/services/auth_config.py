@@ -12,18 +12,19 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 
-from dm_mcp.infra.persistence import AppSettingsModel, OAuthProviderModel, get_async_session
-from dm_mcp.infra.persistence.models import OAuthProviderModel as _OAuthProviderModel
+from dm_mcp.core.service import BaseService, ServiceFactory, ServiceMetadata
+from dm_mcp.infra.persistence import (
+    AppSettingsModel,
+    OAuthProviderModel,
+    get_async_session,
+)
 from dm_mcp.infra.security.crypto import FernetCrypto
-from dm_mcp.core.service import ServiceFactory, ServiceMetadata
-
-from dm_mcp.core.service import BaseService
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +149,10 @@ class AuthConfigService(BaseService):
         Raises:
             ValueError: 当包含无效的配置项时
         """
-        for key in updates:
+        for key, value in updates.items():
             if key not in ALL_KV_CONFIG_KEYS:
                 raise ValueError(f"无效的配置项: {key}")
-            self._config[key] = updates[key]
+            self._config[key] = value
 
         async with get_async_session() as session:
             for key, value in updates.items():
@@ -251,6 +252,7 @@ class AuthConfigService(BaseService):
                         other.slot,
                     )
                     continue
+                now = datetime.now(UTC)
                 model = OAuthProviderModel(
                     slot=slot,
                     name=slot,
@@ -260,6 +262,8 @@ class AuthConfigService(BaseService):
                     client_id="",
                     client_secret_enc="",
                     scopes=DEFAULT_SCOPES.get(slot, DEFAULT_SCOPES["oidc"]),
+                    created_at=now,
+                    updated_at=now,
                 )
                 session.add(model)
                 by_slot[slot] = model
@@ -321,7 +325,7 @@ class AuthConfigService(BaseService):
                 model.userinfo_endpoint = config.userinfo_endpoint
                 model.jwks_uri = config.jwks_uri
 
-            model.updated_at = datetime.now(timezone.utc)
+            model.updated_at = datetime.now(UTC)
 
         logger.info(f"OAuth provider '{slot}' 配置已更新")
         return await self.get_provider(slot, include_secrets=False)

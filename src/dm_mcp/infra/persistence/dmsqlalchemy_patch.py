@@ -6,6 +6,8 @@
 2. DMDialect.get_columns 和 get_identity_info 在 SQL 中硬编码对 SYS.SYSCOLUMNS /
    SYS.SYSOBJECTS 的关联查询，导致普通非 DBA 用户（如 RESOURCE 角色）反射表结构时
    报 [CODE:-5504]No select privilege on object [SYS.SYSCOLUMNS] 的问题。
+3. 达梦异步方言 (dm+dmAsync) 批量插入 (executemany) 时，因 dmAsync 驱动的 executemany
+   返回 None，导致 async_do_executemany_return 报 TypeError: 'NoneType' object is not subscriptable 的问题。
 """
 
 import logging
@@ -212,8 +214,160 @@ def _patch_reflection() -> None:
         logger.debug(f"应用 dmSQLAlchemy 反射权限降级补丁跳过或失败: {e}")
 
 
+def _patch_executemany() -> None:
+    """修复 dmSQLAlchemy 中批量插入 (executemany) 相关兼容性问题。
+
+    1. 达梦异步方言 (DMDialectAsync_dmasync / DMDialect_dmAsync) 默认
+       insert_executemany_returning = True，但底层 dmAsync 驱动的 executemany
+       不返回结果集，导致 SQLAlchemy 尝试批量获取 RETURNING 时失败。
+       将其设置为 False，使 SQLAlchemy 采用单行 INSERT ... RETURNING 模式，
+       保证各行主键和默认列（如 created_at/updated_at）正常正确返回。
+    2. DMDialect_Adapter.async_do_executemany_return 在 result 为 None 时
+       直接执行 result[poslist[k]] 抛出 TypeError: 'NoneType' object is not subscriptable。
+       在此进行安全防护，并在 result 为 None 时为 out_parameters 赋初值 [None] * rows。
+    3. 同理对 DMDialect_Adapter.do_executemany_return 进行安全防护。
+    """
+    try:
+        import inspect
+
+        import dmSQLAlchemy.dmasync as dm_async
+        import dmSQLAlchemy.extensions as dm_ext
+        from sqlalchemy.util import await_only
+
+        # 1. 禁用异步方言的 executemany_returning
+        for dialect_cls_name in ("DMDialectAsync_dmasync", "DMDialect_dmAsync"):
+            dialect_cls = getattr(dm_async, dialect_cls_name, None)
+            if dialect_cls is not None:
+                dialect_cls.insert_executemany_returning = False
+                dialect_cls.insert_executemany_returning_sort_by_parameter_order = False
+
+        # 2. 修复 DMDialect_Adapter.async_do_executemany_return 与 do_executemany_return
+        adapter_cls = getattr(dm_ext, "DMDialect_Adapter", None)
+        if adapter_cls is not None and not getattr(
+            adapter_cls, "_executemany_patch_applied", False
+        ):
+            orig_async_do_executemany_return = adapter_cls.async_do_executemany_return
+            orig_do_executemany_return = adapter_cls.do_executemany_return
+
+            def safe_async_do_executemany_return(
+                self, columns, rows, dialect, cursor, statement, parameters, context=None
+            ):
+                if (
+                    context is not None
+                    and context.out_parameters is not None
+                    and len(context.out_parameters) > 0
+                ):
+                    dict_len = len(context.out_parameters)
+                    poslist = []
+                    for k in range(dict_len):
+                        key = f"ret_{k}"
+                        target_param = context.out_parameters.get(key)
+                        for j in range(columns):
+                            if parameters and parameters[0][j] == target_param:
+                                poslist.append(j)
+                                break
+                    if len(poslist) == dict_len:
+                        poslist, parameters = dialect.check_position(poslist, parameters)
+
+                    res = cursor.executemany(statement, parameters)
+                    result = await_only(res) if inspect.isawaitable(res) else res
+
+                    if result is not None and isinstance(result, (list, tuple, dict)):
+                        for k in range(dict_len):
+                            key = f"ret_{k}"
+                            if k < len(poslist) and poslist[k] < len(result):
+                                val = result[poslist[k]]
+                                context.out_parameters[key] = (
+                                    [] if val == [None] else val
+                                )
+                            else:
+                                context.out_parameters[key] = [None] * rows
+                    else:
+                        for k in range(dict_len):
+                            context.out_parameters[f"ret_{k}"] = [None] * rows
+                else:
+                    if (
+                        context is None
+                        or getattr(context, "invoked_statement", None) is None
+                    ):
+                        res = cursor.executemany(statement, parameters)
+                        if inspect.isawaitable(res):
+                            await_only(res)
+                        return
+                    orig_async_do_executemany_return(
+                        self,
+                        columns,
+                        rows,
+                        dialect,
+                        cursor,
+                        statement,
+                        parameters,
+                        context,
+                    )
+
+            def safe_do_executemany_return(
+                self, columns, rows, dialect, cursor, statement, parameters, context=None
+            ):
+                if (
+                    context is not None
+                    and context.out_parameters is not None
+                    and len(context.out_parameters) > 0
+                ):
+                    dict_len = len(context.out_parameters)
+                    poslist = []
+                    for k in range(dict_len):
+                        key = f"ret_{k}"
+                        target_param = context.out_parameters.get(key)
+                        for j in range(columns):
+                            if parameters and parameters[0][j] == target_param:
+                                poslist.append(j)
+                                break
+                    if len(poslist) == dict_len:
+                        poslist, parameters = dialect.check_position(poslist, parameters)
+
+                    result = cursor.executemany(statement, parameters)
+
+                    if result is not None and isinstance(result, (list, tuple, dict)):
+                        for k in range(dict_len):
+                            key = f"ret_{k}"
+                            if k < len(poslist) and poslist[k] < len(result):
+                                val = result[poslist[k]]
+                                context.out_parameters[key] = (
+                                    [] if val == [None] else val
+                                )
+                            else:
+                                context.out_parameters[key] = [None] * rows
+                    else:
+                        for k in range(dict_len):
+                            context.out_parameters[f"ret_{k}"] = [None] * rows
+                else:
+                    if (
+                        context is None
+                        or getattr(context, "invoked_statement", None) is None
+                    ):
+                        cursor.executemany(statement, parameters)
+                        return
+                    orig_do_executemany_return(
+                        self,
+                        columns,
+                        rows,
+                        dialect,
+                        cursor,
+                        statement,
+                        parameters,
+                        context,
+                    )
+
+            adapter_cls.async_do_executemany_return = safe_async_do_executemany_return
+            adapter_cls.do_executemany_return = safe_do_executemany_return
+            adapter_cls._executemany_patch_applied = True
+            logger.info("已成功应用 dmSQLAlchemy executemany returning 修复补丁")
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"应用 dmSQLAlchemy executemany 补丁跳过或失败: {e}")
+
+
 def apply_dmsqlalchemy_patch() -> None:
-    """修复 dmSQLAlchemy 2.0.17 异步适配器 slots 及非 DBA 权限反射问题。
+    """修复 dmSQLAlchemy 2.0.17 异步适配器 slots、反射权限及 executemany 问题。
 
     1. slots 描述符修复：
        AsyncAdapt_dmasync_connection 和 AsyncAdapt_dmasync_cursor 上定义的
@@ -222,6 +376,9 @@ def apply_dmsqlalchemy_patch() -> None:
     2. 反射权限修复：
        当数据库用户非 DBA 且未授权 SYSCOLUMNS 时，DMDialect.get_columns
        自动降级回退到 ALL_TAB_COLS。
+    3. 批量插入 (executemany) 返回值修复：
+       禁用异步方言的 insert_executemany_returning 并防御 async_do_executemany_return
+       在 result 为 None 时的 TypeError 异常。
     """
     global _DMSQLALCHEMY_PATCHED
     if _DMSQLALCHEMY_PATCHED:
@@ -245,6 +402,7 @@ def apply_dmsqlalchemy_patch() -> None:
             logger.info("已成功应用 dmSQLAlchemy 异步适配器 slots 修复补丁")
 
         _patch_reflection()
+        _patch_executemany()
         _DMSQLALCHEMY_PATCHED = True
     except Exception as e:  # noqa: BLE001
         logger.debug(f"应用 dmSQLAlchemy 补丁跳过或失败（非达梦异步环境）: {e}")
