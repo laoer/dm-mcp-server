@@ -6,10 +6,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from dm_mcp.common import messages
 from dm_mcp.infra.config.server_config import ServerConfig
 
 from .models import Base
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaIncompatibleError(RuntimeError):
@@ -55,9 +59,17 @@ def collect_schema_issues(inspector) -> list[str]:
             )
             continue
 
-        db_column_names = {
-            col["name"].lower() for col in inspector.get_columns(table_name)
-        }
+        try:
+            db_column_names = {
+                col["name"].lower() for col in inspector.get_columns(table_name)
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "校验表 %s 结构时获取列元数据失败 (可能受限于非 DBA 字典表权限): %s，跳过该表字段级对比",
+                table_name,
+                e,
+            )
+            continue
         for column in table.columns:
             col_name = column.name
             if col_name.lower() not in db_column_names:

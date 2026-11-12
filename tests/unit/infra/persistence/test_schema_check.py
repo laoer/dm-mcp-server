@@ -7,8 +7,8 @@ from sqlalchemy import create_engine, text
 
 from dm_mcp.infra.config.database_config import DatabaseConfig, SQLiteConfig
 from dm_mcp.infra.config.server_config import ServerConfig
-from dm_mcp.infra.persistence.models import Base
 from dm_mcp.infra.persistence import session
+from dm_mcp.infra.persistence.models import Base
 from dm_mcp.infra.persistence.schema_check import (
     SchemaIncompatibleError,
     collect_schema_issues,
@@ -59,6 +59,15 @@ class TestCollectSchemaIssues:
         issues = collect_schema_issues(inspector)
 
         assert not any("datasources" in issue for issue in issues)
+
+    def test_gracefully_handles_get_columns_exception(self):
+        inspector = MagicMock()
+        inspector.has_table.return_value = True
+        inspector.get_columns.side_effect = Exception("No select privilege on SYSCOLUMNS")
+
+        # 不应抛出异常，优雅降级跳过
+        issues = collect_schema_issues(inspector)
+        assert issues == []
 
 
 class TestSchemaIncompatibleError:
@@ -118,9 +127,11 @@ class TestVerifySchemaCompatibleSync:
                 )
             )
 
-        with engine.connect() as conn:
-            with pytest.raises(SchemaIncompatibleError) as exc_info:
-                verify_schema_compatible_sync(conn, schema_hint=str(db_path))
+        with (
+            engine.connect() as conn,
+            pytest.raises(SchemaIncompatibleError) as exc_info,
+        ):
+            verify_schema_compatible_sync(conn, schema_hint=str(db_path))
 
         assert "owner_id" in str(exc_info.value)
         engine.dispose()

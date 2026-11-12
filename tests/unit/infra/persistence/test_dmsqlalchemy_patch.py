@@ -3,12 +3,13 @@
 from unittest.mock import MagicMock, patch
 
 import dmSQLAlchemy.dmasync as dm_async
+from sqlalchemy.dialects import registry
 
 import dm_mcp.infra.persistence.dmsqlalchemy_patch as patch_module
 
 
 class TestDmSQLAlchemyPatch:
-    """测试 dmSQLAlchemy slots 描述符补丁"""
+    """测试 dmSQLAlchemy slots 描述符与非 DBA 权限反射补丁"""
 
     def test_apply_patch_removes_shadowed_attributes(self):
         """测试补丁成功删除子类上遮蔽 slots 的 _connection 和 _cursor 类属性"""
@@ -54,8 +55,53 @@ class TestDmSQLAlchemyPatch:
         cur._cursor = mock_cursor_raw
         assert cur._cursor is mock_cursor_raw
 
+    def test_get_columns_fallback_on_syscolumns_privilege_error(self):
+        """测试当遇到 SYSCOLUMNS 权限错误 (-5504) 时，get_columns 降级使用 ALL_TAB_COLS"""
+        patch_module._DMSQLALCHEMY_PATCHED = False
+        patch_module.apply_dmsqlalchemy_patch()
+
+        dialect_cls = registry.load("dm.dmAsync")
+        dialect = dialect_cls()
+        dialect.default_schema_name = "XINHUA_APP"
+
+        mock_conn = MagicMock()
+
+        def mock_exec(stmt, *args, **kwargs):
+            s = str(stmt)
+            if "SYSCOLUMNS syscol" in s:
+                raise RuntimeError("(dmPython.DatabaseError) [CODE:-5504]No select privilege on object [SYS.SYSCOLUMNS]")
+            # 模拟 fallback 查询结果
+            res = MagicMock()
+            res.__iter__.return_value = [
+                ("id", "id", "BIGINT", 8, 19, 0, "N", None, "主键ID", "NO"),
+                ("username", "username", "VARCHAR", 64, None, None, "N", None, "用户名", "NO"),
+            ]
+            return res
+
+        mock_conn.execute.side_effect = mock_exec
+
+        cols = dialect.get_columns(mock_conn, "ADMIN_USERS")
+        assert len(cols) == 2
+        col_names = [c["name"] for c in cols]
+        assert "id" in col_names
+        assert "username" in col_names
+
+    def test_get_identity_info_fallback_on_syscolumns_privilege_error(self):
+        """测试当遇到 SYSCOLUMNS 权限错误时，get_identity_info 安全返回空列表"""
+        patch_module._DMSQLALCHEMY_PATCHED = False
+        patch_module.apply_dmsqlalchemy_patch()
+
+        dialect_cls = registry.load("dm.dmAsync")
+        dialect = dialect_cls()
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = RuntimeError("[CODE:-5504]No select privilege on object [SYS.SYSCOLUMNS]")
+
+        result = dialect.get_identity_info(mock_conn, "XINHUA_APP", ["ADMIN_USERS"], "")
+        assert result == []
+
     def test_graceful_when_import_fails(self):
         """测试导入失败时静默跳过不抛异常"""
         patch_module._DMSQLALCHEMY_PATCHED = False
-        with patch.dict("sys.modules", {"dmSQLAlchemy.dmasync": None}):
+        with patch.dict("sys.modules", {"dmSQLAlchemy.dmasync": None, "dmSQLAlchemy.base": None}):
             patch_module.apply_dmsqlalchemy_patch()
