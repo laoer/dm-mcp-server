@@ -32,7 +32,10 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "redis>=7.1.0",
     "parse>=1.20.2",
-    "sqlalchemy>=2.0.45",
+    # 必须带 asyncio extra：greenlet 是 SQLAlchemy asyncio 扩展的运行时依赖。
+    # 仅声明 sqlalchemy 时 greenlet 只是按 platform_machine 判断的条件依赖，
+    # 在部分平台/离线安装场景不会被装上，导致启动时 ImportError。
+    "sqlalchemy[asyncio]>=2.0.45",
     "aiosqlite>=0.19.0",
     "dmsqlalchemy>=2.0.11",
     "pymysql>=1.1.0",

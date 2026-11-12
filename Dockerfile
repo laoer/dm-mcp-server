@@ -40,6 +40,10 @@ RUN pip install --no-cache-dir /wheels/*.whl \
   && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
   && rm -rf /usr/local/bin/pip*
 
+# 构建期自检：sqlalchemy.ext.asyncio 依赖 greenlet，缺依赖时让 build 直接失败，
+# 而不是等到容器启动才抛 ImportError
+RUN python -c "import greenlet; import sqlalchemy.ext.asyncio"
+
 # 默认启用 HTTP 传输（使容器对外提供 Web/API）
 ENV SERVER__TRANSPORT=http \
   SERVER__HOST=0.0.0.0 \

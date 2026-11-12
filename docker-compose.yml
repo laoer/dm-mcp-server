@@ -1,6 +1,8 @@
 services:
   dm-mcp-server:
-    image: dameng/dm-mcp-server:0.1.0
+    image: dameng/dm-mcp-server:0.2.0
+    build:
+      context: .
     ports:
       - "18081:18081"
     env_file:

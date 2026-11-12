@@ -74,7 +74,7 @@ docker compose up --build
 
 说明：
 
-- 镜像：`dameng/dm-mcp-server:0.1.0`，入口命令为 `dm-mcp-server`
+- 镜像：`dameng/dm-mcp-server:0.2.0`（由 `docker-compose.yml` 中的 `build: .` 构建），入口命令为 `dm-mcp-server`
 - 默认监听 `18081`，`base_url` 为 `/dm-mcp`
 - `docker-compose.yml` 通过 `env_file: .env` 加载配置
 - 数据卷：`./data`（SQLite）、`./logs`、`./metrics`
